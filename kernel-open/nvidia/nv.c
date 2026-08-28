@@ -36,6 +36,7 @@
 #include "nv-reg.h"
 #include "nv-msi.h"
 #include "nv-pci-table.h"
+#include "nv-pci.h"
 #include "nv-chardev-numbers.h"
 
 #if defined(NV_UVM_ENABLE)
@@ -1862,6 +1863,10 @@ static int nv_open_device(nv_state_t *nv, nvidia_stack_t *sp)
     }
 
     nv_assert_not_in_gpu_exclusion_list(sp, nv);
+
+    rc = nv_pci_begin_active_epoch(nvl);
+    if (rc)
+        return rc;
 
     atomic64_inc(&nvl->usage_count);
 
@@ -5296,6 +5301,8 @@ int nv_pmops_runtime_suspend(
     nv_pci_tegra_boost_clocks(dev);
 #endif
 
+    nv_pci_end_active_epoch(nvl);
+
     err = nvidia_transition_dynamic_power(dev, NV_TRUE);
     if (err)
     {
@@ -5313,6 +5320,7 @@ int nv_pmops_runtime_suspend(
     return err;
 
 nv_pmops_runtime_suspend_exit:
+    nv_pci_begin_active_epoch(nvl);
 #if defined(CONFIG_PM_DEVFREQ)
     if (nvl->devfreq_resume != NULL)
     {
@@ -5327,16 +5335,22 @@ int nv_pmops_runtime_resume(
 )
 {
     int err = 0;
-#if defined(CONFIG_PM_DEVFREQ)
     struct pci_dev *pci_dev = to_pci_dev(dev);
     nv_linux_state_t *nvl = pci_get_drvdata(pci_dev);
-
+#if defined(CONFIG_PM_DEVFREQ)
     nv_pci_tegra_boost_clocks(dev);
 #endif
 
     err = nvidia_transition_dynamic_power(dev, NV_FALSE);
     if (err)
     {
+        return err;
+    }
+
+    err = nv_pci_begin_active_epoch(nvl);
+    if (err)
+    {
+        nvidia_transition_dynamic_power(dev, NV_TRUE);
         return err;
     }
 
@@ -5355,6 +5369,7 @@ int nv_pmops_runtime_resume(
 
 #if defined(CONFIG_PM_DEVFREQ)
 nv_pmops_runtime_resume_exit:
+    nv_pci_end_active_epoch(nvl);
     nvidia_transition_dynamic_power(dev, NV_TRUE);
     return err;
 #endif
