@@ -70,6 +70,7 @@ ct_assert(NVKMS_KAPI_LAYER_MAX == NVKMS_MAX_LAYERS_PER_HEAD);
 #define NVKMS_KAPI_SUPPORTED_EVENTS_MASK             \
     ((1 << NVKMS_EVENT_TYPE_DPY_CHANGED) |           \
      (1 << NVKMS_EVENT_TYPE_DYNAMIC_DPY_CONNECTED) | \
+     (1 << NVKMS_EVENT_TYPE_DP_CEC_IRQ) |            \
      (1 << NVKMS_EVENT_TYPE_FLIP_OCCURRED))
 
 static NvU32 EnumerateGpus(void (*gpuCallback)(const struct NvKmsKapiGpuInfo *info))
@@ -1566,6 +1567,55 @@ done:
     }
 
     return status;
+}
+
+static NvBool DpAuxTransfer(
+    struct NvKmsKapiDevice *device,
+    struct NvKmsKapiDpAuxTransferParams *params)
+{
+    struct NvKmsDpAuxTransferParams ioctlParams = { };
+    NvBool status;
+
+    if ((device == NULL) || (params == NULL) ||
+        (params->size == 0U) ||
+        (params->size > NVKMS_KAPI_DP_AUX_MAX_DATA_SIZE)) {
+        return NV_FALSE;
+    }
+
+    ioctlParams.request.deviceHandle = device->hKmsDevice;
+    ioctlParams.request.dispHandle = device->hKmsDisp;
+    ioctlParams.request.dpyId = nvNvU32ToDpyId(params->display);
+    ioctlParams.request.address = params->address;
+    ioctlParams.request.write = params->write;
+    ioctlParams.request.size = params->size;
+    nvkms_memcpy(ioctlParams.request.data, params->data, params->size);
+
+    status = nvkms_ioctl_from_kapi(device->pKmsOpen,
+                                   NVKMS_IOCTL_DP_AUX_TRANSFER,
+                                   &ioctlParams, sizeof(ioctlParams));
+    if (!status) {
+        return NV_FALSE;
+    }
+
+    params->size = ioctlParams.reply.size;
+    nvkms_memcpy(params->data, ioctlParams.reply.data,
+                 NV_MIN((NvU32)params->size,
+                        (NvU32)NVKMS_KAPI_DP_AUX_MAX_DATA_SIZE));
+
+    switch (ioctlParams.reply.reply) {
+    case NVKMS_DP_AUX_REPLY_ACK:
+        params->reply = NVKMS_KAPI_DP_AUX_REPLY_ACK;
+        break;
+    case NVKMS_DP_AUX_REPLY_DEFER:
+        params->reply = NVKMS_KAPI_DP_AUX_REPLY_DEFER;
+        break;
+    case NVKMS_DP_AUX_REPLY_NACK:
+    default:
+        params->reply = NVKMS_KAPI_DP_AUX_REPLY_NACK;
+        break;
+    }
+
+    return NV_TRUE;
 }
 
 static void FreeMemory
@@ -3866,6 +3916,11 @@ void nvKmsKapiHandleEventQueueChange
                     nvDpyIdToNvU32(kmsEventParams.
                                    reply.event.u.dpyChanged.dpyId);
                 break;
+            case NVKMS_EVENT_TYPE_DP_CEC_IRQ:
+                kapiEvent.u.dpCecIrq.display =
+                    nvDpyIdToNvU32(kmsEventParams.
+                                   reply.event.u.dpCecIrq.dpyId);
+                break;
             case NVKMS_EVENT_TYPE_DYNAMIC_DPY_CONNECTED:
                 kapiEvent.u.dynamicDisplayConnected.display =
                     nvDpyIdToNvU32(kmsEventParams.
@@ -4157,6 +4212,7 @@ NvBool nvKmsKapiGetFunctionsTableInternal
 
     funcsTable->getStaticDisplayInfo   = GetStaticDisplayInfo;
     funcsTable->getDynamicDisplayInfo  = GetDynamicDisplayInfo;
+    funcsTable->dpAuxTransfer          = DpAuxTransfer;
 
     funcsTable->allocateMemory       = AllocateMemory;
     funcsTable->importMemory         = ImportMemory;

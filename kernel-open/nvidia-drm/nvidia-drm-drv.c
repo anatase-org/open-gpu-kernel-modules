@@ -232,6 +232,12 @@ static void nv_drm_event_callback(const struct NvKmsKapiEvent *event)
                 event->u.displayChanged.display);
             break;
 
+        case NVKMS_EVENT_TYPE_DP_CEC_IRQ:
+            nv_drm_handle_dp_cec_irq(
+                nv_dev,
+                event->u.dpCecIrq.display);
+            break;
+
         case NVKMS_EVENT_TYPE_DYNAMIC_DPY_CONNECTED:
             nv_drm_handle_dynamic_display_connected(
                 nv_dev,
@@ -850,6 +856,7 @@ static int nv_drm_dev_load(struct drm_device *dev)
             nv_dev->pDevice,
             ((1 << NVKMS_EVENT_TYPE_DPY_CHANGED) |
              (1 << NVKMS_EVENT_TYPE_DYNAMIC_DPY_CONNECTED) |
+             (1 << NVKMS_EVENT_TYPE_DP_CEC_IRQ) |
              (1 << NVKMS_EVENT_TYPE_FLIP_OCCURRED)))) {
         NV_DRM_DEV_LOG_ERR(nv_dev, "Failed to register event mask");
     }

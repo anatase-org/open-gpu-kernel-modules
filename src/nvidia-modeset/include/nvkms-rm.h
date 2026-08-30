@@ -40,6 +40,20 @@ NvBool nvWriteDPCDReg(NVConnectorEvoPtr pConnectorEvo,
                       NvU32 dpcdAddr,
                       NvU8 dpcdData);
 
+enum NvRmDpAuxReply {
+    NV_RM_DP_AUX_REPLY_ACK,
+    NV_RM_DP_AUX_REPLY_NACK,
+    NV_RM_DP_AUX_REPLY_DEFER,
+};
+
+NvBool nvRmDpAuxTransfer(NVConnectorEvoPtr pConnectorEvo,
+                         NvU32 address,
+                         NvBool write,
+                         NvU8 *data,
+                         NvU8 size,
+                         enum NvRmDpAuxReply *pReply,
+                         NvU8 *pTransferred);
+
 NvBool nvRmRegisterCallback(const NVDevEvoRec *pDevEvo,
                             NVOS10_EVENT_KERNEL_CALLBACK_EX *cb,
                             struct nvkms_ref_ptr *ref_ptr,

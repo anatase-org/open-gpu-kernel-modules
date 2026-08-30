@@ -5508,6 +5508,18 @@ void ConnectorImpl::handleMCCSIRQ()
     }
 }
 
+void ConnectorImpl::handleCECIRQ()
+{
+    for (Device *i = enumDevices(0); i; i = enumDevices(i))
+    {
+        DeviceImpl *dev = (DeviceImpl *)i;
+        if (dev->plugged)
+        {
+            sink->notifyCECEvent(dev);
+        }
+    }
+}
+
 void ConnectorImpl::handlePanelReplayError()
 {
     hal->readPanelReplayError();
@@ -8074,6 +8086,12 @@ void ConnectorImpl::notifyShortPulse()
     DP_PRINTF(DP_INFO, "DP> IRQ");
     hal->notifyIRQ();
 
+    // Leave the CEC IRQ bit set for the DRM CEC helper to acknowledge.
+    if (hal->interruptCEC())
+    {
+        handleCECIRQ();
+    }
+
     // Handle CP_IRQ
     if (hal->interruptContentProtection())
     {
@@ -9335,4 +9353,3 @@ void ConnectorImpl::ensureMstNodesPoweredUp(Group * target)
         }
     }
 }
-
